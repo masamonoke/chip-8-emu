@@ -1,0 +1,6 @@
+build
+.git
+.cache
+.DS_Store
+chip8emu
+compile_commands.json
