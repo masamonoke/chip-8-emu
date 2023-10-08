@@ -4,3 +4,4 @@ build
 .DS_Store
 chip8emu
 compile_commands.json
+roms

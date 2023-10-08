@@ -19,6 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning "-Wformat-nonliteral"
 
 #include "log.h"
 
@@ -166,3 +168,5 @@ void log_log(int level, const char *file, int line, const char *fmt, ...) {
 
   unlock();
 }
+
+#pragma GCC diagnostic pop
