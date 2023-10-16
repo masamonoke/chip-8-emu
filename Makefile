@@ -12,6 +12,8 @@ OBJ := $(shell find $(DEPS_DIR) -name '*.c' -type f -execdir echo '{}' ';' | sed
 
 INCLUDES := -Iinclude -Idependency/log/src
 COMPILE_TYPE = dev
+SDL2CFLAGS=-I/opt/homebrew/Cellar/sdl2/2.28.3/include -D_THREAD_SAFE
+LDFLAGS=-L/opt/homebrew/Cellar/sdl2/2.28.3/lib -lSDL2
 CFLAGS_DEV := -pedantic -Wall \
      -Wno-missing-braces -Wextra -Wno-missing-field-initializers \
      -Wformat=2 -Wswitch-default -Wswitch-enum -Wcast-align \
@@ -22,7 +24,7 @@ CFLAGS_DEV := -pedantic -Wall \
      -Wold-style-definition -Werror \
      -fno-omit-frame-pointer\
      -fno-common -fstrict-aliasing \
-	 -g
+	 -g -DDEBUG -pthread $(SDL2CFLAGS)
 
 CFLAGS_RELEASE := -pedantic -Wall \
      -Wno-missing-braces -Wextra -Wno-missing-field-initializers \
@@ -34,10 +36,10 @@ CFLAGS_RELEASE := -pedantic -Wall \
      -Wold-style-definition -Werror \
      -fno-omit-frame-pointer\
      -fno-common -fstrict-aliasing \
-	 -O3 -DNDEBUG -funroll-loops
+	 -O3 -DNDEBUG -funroll-loops $(SDL2CFLAGS)
 
 $(TARGET_NAME): deps
-	$(CC) $(OBJ) -o $@ -fsanitize=address
+	$(CC) $(OBJ) -o $@ -fsanitize=address $(LDFLAGS)
 
 deps: $(DEPS) $(SRC)
 	if ! test -d build; then mkdir build; fi

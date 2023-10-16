@@ -1,5 +1,5 @@
-#ifndef CPU
-#define CPU
+#ifndef CPU_H
+#define CPU_H
 
 typedef struct cpu_instance cpu_instance_t;
 
@@ -14,4 +14,4 @@ enum CpuResult cpu_create_instance(cpu_instance_t** instance);
 
 void cpu_start(cpu_instance_t* instance, char* rom);
 
-#endif // CPU
+#endif // CPU_H

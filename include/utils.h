@@ -1,5 +1,5 @@
-#ifndef UTILS
-#define UTILS
+#ifndef UTILS_H
+#define UTILS_H
 
 #include <log.h>
 
@@ -7,4 +7,4 @@
 
 #define NOT_IMPLEMENTED(func_name) (log_error("%s not implemented!", func_name))
 
-#endif // UTILS
+#endif // UTILS_H

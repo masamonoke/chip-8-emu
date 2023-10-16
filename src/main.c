@@ -3,8 +3,18 @@
 #include <log.h>
 
 #include <cpu.h>
+#include <sdl_wrapper.h>
 
 void run(cpu_instance_t* inst, char* rom) {
+	/* int width, height; */
+	/* sdl_view_t* view; */
+	/* uint8_t* rgb24; */
+
+	/* width = 64; */
+	/* height = 32; */
+	/* view = sdl_wrapper_create_view("CHIP-8", 64, 32, 8); */
+	/* rgb24 = calloc(width * height * 3, sizeof(uint8_t)); */
+	/* sdl_wrapper_set_frame_rgb24(view, rgb24, height); */
 	cpu_start(inst, rom);
 }
 

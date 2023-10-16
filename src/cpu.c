@@ -7,14 +7,22 @@
 #include <stdatomic.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include <log.h>
 
 #include <utils.h>
+#include <image.h>
 
 static const int refresh_rate_hz = 60;
 static const int cycle_speed_hz = refresh_rate_hz * 9;
 static const int cycles_per_frame = cycle_speed_hz / refresh_rate_hz;
+
+#ifdef DEBUG
+#define dbg(...) log_debug(__VA_ARGS__);
+#else
+#define dbg(...)
+#endif
 
 struct cpu_instance {
 	uint16_t current_opcode_;
@@ -29,6 +37,7 @@ struct cpu_instance {
 	uint8_t keypad_state_[16];
 	uint64_t num_cycles_;
 	_Atomic(bool) is_running_;
+	image_t* image;
 };
 
 enum CpuResult cpu_create_instance(cpu_instance_t** inst) {
@@ -74,7 +83,7 @@ static enum CpuResult load_rom(cpu_instance_t* inst, char* rom) {
 		return res;
 	}
 	memcpy(inst->memory_ + 0x200, buf, len);
-	log_debug("Loaded %d bytes size rom", len);
+	dbg("Loaded %d bytes size rom", len);
 	return res;
 }
 
@@ -118,6 +127,7 @@ static enum CpuResult init(cpu_instance_t* inst, char* rom) {
 		0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 	};
 	memcpy(inst->memory_ + 0x50, fontset, sizeof(fontset));
+	inst->image = image_create(32, 64);
 
 	return load_rom(inst, rom);
 }
@@ -135,25 +145,25 @@ static void jp(cpu_instance_t* inst, uint16_t addr) {
 /* The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn. */
 static void call(cpu_instance_t* inst, uint16_t addr) {
 	inst->stack_[inst->stack_pointer_++] = inst->program_counter_;
-	log_debug("CALL 0x%X - PUSH 0x%X onto stack", addr, inst->stack_[inst->stack_pointer_ - 1]);
+	dbg("CALL 0x%X - PUSH 0x%X onto stack", addr, inst->stack_[inst->stack_pointer_ - 1]);
 	inst->program_counter_ = addr;
 }
 
 static void skip(cpu_instance_t* inst) {
 	inst->program_counter_ += 4;
-	log_debug("SKIP from 0x%X to 0x%X", inst->program_counter_ - 4, inst->program_counter_);
+	dbg("SKIP from 0x%X to 0x%X", inst->program_counter_ - 4, inst->program_counter_);
 }
 
 static void next(cpu_instance_t* inst) {
 	inst->program_counter_ += 2;
-	log_debug("NEXT from 0x%X to 0x%X", inst->program_counter_ - 2, inst->program_counter_);
+	dbg("NEXT from 0x%X to 0x%X", inst->program_counter_ - 2, inst->program_counter_);
 }
 
 /* 3xkk - SE Vx, byte */
 /* Skip next instruction if Vx = kk. */
 /* The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2. */
 static void se(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
-	log_debug("SE V%d, kk");
+	dbg("SE V%d, kk");
 	inst->v_registers_[reg] == value ? skip(inst) : next(inst);
 }
 
@@ -170,7 +180,7 @@ static void sereg(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 // 6xkk - LD Vx, byte
 // Set Vx = kk.
 static void ldim(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
-	log_debug("V%x <== 0x%X", reg, reg, value);
+	dbg("V%x <== 0x%X", reg, reg, value);
 	inst->v_registers_[reg] = value;
 	next(inst);
 }
@@ -178,7 +188,7 @@ static void ldim(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
 // 7xkk - ADD Vx, byte
 // Set Vx = Vx + kk.
 static void addim(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
-	log_debug("V%d <== V%d + 0x%X", reg, reg, value);
+	dbg("V%d <== V%d + 0x%X", reg, reg, value);
 	inst->v_registers_[reg] += value;
 	next(inst);
 }
@@ -271,7 +281,7 @@ static void snereg(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 /* The value of register I is set to nnn. */
 static void ldi(cpu_instance_t* inst, uint16_t addr) {
 	inst->index_register_ = addr;
-	log_debug("I <== 0x%X", inst->index_register_, addr);
+	dbg("I <== 0x%X", inst->index_register_, addr);
 	next(inst);
 }
 
@@ -305,12 +315,8 @@ static void draw(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y, uint8_t n_r
 
 	x = inst->v_registers_[reg_x];
 	y = inst->v_registers_[reg_y];
-	// TODO: draw function
-	NOT_IMPLEMENTED("draw");
-	UNUSED(x);
-	UNUSED(y);
-	UNUSED(pixels_unset);
-	UNUSED(n_rows);
+	pixels_unset = image_xor_sprite(inst->image, x, y, n_rows, inst->memory_ + inst->index_register_);
+	inst->v_registers_[0xF] = pixels_unset;
 	next(inst);
 }
 
@@ -377,7 +383,7 @@ static void ldsprite(cpu_instance_t* inst, uint8_t reg) {
 
 	digit = inst->v_registers_[reg];
 	inst->index_register_ = 0x50 + (5 * digit);
-	log_debug("LD (sprite) digit %d. I <== 0x%X", digit, 0x50 + (5 * digit));
+	dbg("LD (sprite) digit %d. I <== 0x%X", digit, 0x50 + (5 * digit));
 	next(inst);
 }
 
@@ -400,7 +406,7 @@ static void stbcd(cpu_instance_t* inst, uint8_t reg) {
 	inst->memory_[i] = hundreds;
 	inst->memory_[i + 1] = tens;
 	inst->memory_[i + 2] = ones;
-	log_debug("LD (store BCD) value: %d, res: %d%d%d", value, hundreds, tens, ones);
+	dbg("LD (store BCD) value: %d, res: %d%d%d", value, hundreds, tens, ones);
 	next(inst);
 }
 
@@ -422,9 +428,9 @@ static void streg(cpu_instance_t* inst, uint8_t reg) {
 static void ldreg(cpu_instance_t* inst, uint8_t reg) {
 	uint8_t v;
 
-	log_debug("LD (Fx65) ");
+	dbg("LD (Fx65) ");
 	for (v = 0; v <= reg; v++) {
-		log_debug("(V%d <== M[%X] {%d})", v, inst->index_register_ + v, inst->memory_[inst->index_register_ + v]);
+		dbg("(V%d <== M[%X] {%d})", v, inst->index_register_ + v, inst->memory_[inst->index_register_ + v]);
 		inst->v_registers_[v] = inst->memory_[inst->index_register_ + v];
 	}
 	next(inst);
@@ -591,6 +597,8 @@ static enum CpuResult execute_instruction(cpu_instance_t* inst) {
 		log_info("RET");
 		ret(inst);
 		return OK;
+	} else if (opcode == 0x0) {
+		return OK;
 	}
 
 	return INSTRUCTION_NOT_FOUND;
@@ -600,7 +608,7 @@ static void run_cycle(cpu_instance_t* inst) {
 	enum CpuResult res;
 
 	inst->current_opcode_ = inst->memory_[inst->program_counter_] << 8 | inst->memory_[inst->program_counter_ + 1];
-	//log_debug("0x%X - 0x%X\t", inst->program_counter_, inst->current_opcode_);
+	//dbg("0x%X - 0x%X\t", inst->program_counter_, inst->current_opcode_);
 	res = execute_instruction(inst);
 	if (res != OK) {
 		log_error("Instruction not found for opcode 0x%X", inst->current_opcode_);
@@ -663,8 +671,33 @@ static void loop(cpu_instance_t* inst) {
 	}
 }
 
+struct thread_data {
+	cpu_instance_t* inst;
+	char* rom;
+};
+
+static void* thread_routine(void* data) {
+	struct thread_data* th_data;
+	cpu_instance_t* inst;
+	char* rom;
+
+	th_data = (struct thread_data*) data;
+	inst = th_data->inst;
+	rom = th_data->rom;
+	init(inst, rom);
+	loop(inst);
+	pthread_exit(NULL);
+}
+
 
 void cpu_start(cpu_instance_t* instance, char* rom) {
-	init(instance, rom);
-	loop(instance);
+	pthread_t thread;
+	struct thread_data th_data;
+
+	th_data.inst = instance;
+	th_data.rom = rom;
+	pthread_create(&thread, NULL, thread_routine, (void*) &th_data);
+	pthread_join(thread, NULL);
+	/* init(instance, rom); */
+	/* loop(instance); */
 }
