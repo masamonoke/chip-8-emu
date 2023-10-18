@@ -135,6 +135,7 @@ enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(
 	};
 	memcpy(inst->memory_ + 0x50, fontset, sizeof(fontset));
 	inst->image = image_create(32, 64);
+	image_set_all(inst->image, 0);
 	inst->frame_callback = frame_callback;
 	inst->rgb24 = rgb24;
 	inst->view = view;

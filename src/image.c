@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <memory.h>
 
+#include <log.h>
+
 struct image {
 	int cols;
 	int rows;
@@ -22,6 +24,10 @@ image_t* image_create(int r, int c) {
 }
 
 uint8_t* image_row(image_t* inst, int r) {
+	if (r < 0 || r > inst->rows) {
+		log_error("Row=%d out of bounds", r);
+		exit(1);
+	}
 	return &inst->data[r * inst->cols];
 }
 
@@ -81,6 +87,10 @@ void image_draw_to_stdout(image_t* inst) {
 }
 
 uint8_t* image_at(image_t* inst, int c, int r) {
+	if (c < 0 || c >= inst->cols) {
+		log_error("Column=%d is out of bounds", c);
+		exit(1);
+	}
 	return &image_row(inst, r)[c];
 }
 
@@ -98,9 +108,9 @@ void image_copy_to_rgb24(image_t* inst, uint8_t* dst, int red_scale, int green_s
 
 	for (row = 0; row < inst->rows; row++) {
 		for (col = 0; col < inst->cols; col++) {
-			dst[(row*col+col) * 3] = *image_at(inst, col, row) * red_scale;
-			dst[(row*col+col) * 3 + 1] = *image_at(inst, col, row) * green_scale;
-			dst[(row*col+col) * 3 + 2] = *image_at(inst, col, row) * blue_scale;
+			dst[(row * inst->cols + col) * 3] = *image_at(inst, col, row) * red_scale;
+			dst[(row * inst->cols + col) * 3 + 1] = *image_at(inst, col, row) * green_scale;
+			dst[(row * inst->cols + col) * 3 + 2] = *image_at(inst, col, row) * blue_scale;
 		}
 	}
 }
