@@ -1,5 +1,7 @@
 #include "sdl_wrapper.h"
 
+#include <pthread.h>
+
 #include <SDL2/SDL.h>
 #include <log.h>
 
@@ -19,11 +21,14 @@ struct sdl_view {
 	SDL_Window* window;
 	SDL_Renderer* renderer;
 	SDL_Texture* window_texture;
+	SDL_Event* events;
 	struct sdl_timer timer;
 	int updates_count;
 	char* title;
+	pthread_mutex_t mu;
 };
 
+#define EVENTS_COUNT 10000
 sdl_view_t* sdl_wrapper_create_view(char* title, int width, int height, int window_scale) {
 	sdl_view_t* view;
 
@@ -62,6 +67,9 @@ sdl_view_t* sdl_wrapper_create_view(char* title, int width, int height, int wind
 	sdl_timer_start(view->timer);
 	view->updates_count = 0;
 
+	view->events = malloc(sizeof(SDL_Event) * EVENTS_COUNT);
+	pthread_mutex_init(&view->mu, NULL);
+
 	return view;
 }
 
@@ -72,10 +80,8 @@ void sdl_wrapper_destroy_view(sdl_view_t* view) {
 	SDL_Quit();
 }
 
-
-#define EVENTS_COUNT 10000
-SDL_Event* sdl_wrapper_update(sdl_view_t* view) {
-	SDL_Event* events;
+SDL_Event* sdl_wrapper_update(sdl_view_t* view, int* events_count) {
+	pthread_mutex_lock(&view->mu);
 	size_t i;
 	SDL_Event e;
 	float avg_fps;
@@ -84,10 +90,9 @@ SDL_Event* sdl_wrapper_update(sdl_view_t* view) {
 		log_error("Need to set the frame before calling update.");
 		exit(1);
 	}
-	events = malloc(sizeof(SDL_Event) * EVENTS_COUNT);
 	i = 0;
 	while (SDL_PollEvent(&e)) {
-		events[i++] = e;
+		view->events[i++] = e;
 	}
 
 	SDL_RenderCopy(view->renderer, view->window_texture, NULL, NULL);
@@ -104,14 +109,18 @@ SDL_Event* sdl_wrapper_update(sdl_view_t* view) {
 		sdl_timer_start(view->timer);
 	}
 
-	return events;
+	*events_count = i - 1;
+	pthread_mutex_unlock(&view->mu);
+	return view->events;
 }
 
 void sdl_wrapper_set_frame_rgb24(sdl_view_t* view, uint8_t* rgb24, int height) {
+	pthread_mutex_lock(&view->mu);
 	void* pixel_data;
 	int pitch;
 
 	SDL_LockTexture(view->window_texture, NULL, &pixel_data, &pitch);
 	memcpy(pixel_data, rgb24, pitch * height);
 	SDL_UnlockTexture(view->window_texture);
+	pthread_mutex_unlock(&view->mu);
 }

@@ -13,6 +13,7 @@
 
 #include <utils.h>
 #include <image.h>
+#include "sdl_wrapper.h"
 
 static const int refresh_rate_hz = 60;
 static const int cycle_speed_hz = refresh_rate_hz * 9;
@@ -38,6 +39,11 @@ struct cpu_instance {
 	uint64_t num_cycles_;
 	_Atomic(bool) is_running_;
 	image_t* image;
+	pthread_t thread;
+	void (*frame_callback)(int, uint8_t*, sdl_view_t*, image_t*, pthread_mutex_t*);
+	uint8_t* rgb24;
+	sdl_view_t* view;
+	pthread_mutex_t* frame_mutex;
 };
 
 enum CpuResult cpu_create_instance(cpu_instance_t** inst) {
@@ -87,7 +93,8 @@ static enum CpuResult load_rom(cpu_instance_t* inst, char* rom) {
 	return res;
 }
 
-static enum CpuResult init(cpu_instance_t* inst, char* rom) {
+enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(int, uint8_t*, sdl_view_t*, image_t*, pthread_mutex_t*), uint8_t* rgb24,
+		sdl_view_t* view, pthread_mutex_t* mu) {
 	memset(inst->memory_, 0, sizeof(inst->memory_));
 	memset(inst->v_registers_, 0, sizeof(inst->v_registers_));
 	memset(inst->keypad_state_, 0, sizeof(inst->keypad_state_));
@@ -128,6 +135,10 @@ static enum CpuResult init(cpu_instance_t* inst, char* rom) {
 	};
 	memcpy(inst->memory_ + 0x50, fontset, sizeof(fontset));
 	inst->image = image_create(32, 64);
+	inst->frame_callback = frame_callback;
+	inst->rgb24 = rgb24;
+	inst->view = view;
+	inst->frame_mutex = mu;
 
 	return load_rom(inst, rom);
 }
@@ -641,6 +652,7 @@ static void loop(cpu_instance_t* inst) {
 			for (cycle = 0; cycle < cycles_per_frame; cycle++) {
 				run_cycle(inst);
 			}
+			inst->frame_callback(32, inst->rgb24, inst->view, inst->image, inst->frame_mutex);
 			timespec_get(&now, TIME_UTC);
 			millis_15.tv_sec = 15 / 1000;
 			millis_15.tv_nsec = (15 % 1000) * 1000000;
@@ -671,33 +683,31 @@ static void loop(cpu_instance_t* inst) {
 	}
 }
 
-struct thread_data {
-	cpu_instance_t* inst;
-	char* rom;
-};
 
 static void* thread_routine(void* data) {
-	struct thread_data* th_data;
 	cpu_instance_t* inst;
-	char* rom;
 
-	th_data = (struct thread_data*) data;
-	inst = th_data->inst;
-	rom = th_data->rom;
-	init(inst, rom);
+	inst = (cpu_instance_t*) data;
+	log_info("is null: %d", inst == NULL);
+	log_info("Starting emulation loop");
+	atomic_store(&inst->is_running_, true);
 	loop(inst);
 	pthread_exit(NULL);
 }
 
+void cpu_start(cpu_instance_t* instance) {
+	pthread_create(&instance->thread, NULL, thread_routine, (void*) instance);
+}
 
-void cpu_start(cpu_instance_t* instance, char* rom) {
-	pthread_t thread;
-	struct thread_data th_data;
+void cpu_stop(cpu_instance_t* instance) {
+	if (!atomic_load(&instance->is_running_)) {
+		log_error("CPU must start() before stopping");
+		exit(1);
+	}
+	atomic_store(&instance->is_running_, false);
+	pthread_join(instance->thread, NULL);
+}
 
-	th_data.inst = instance;
-	th_data.rom = rom;
-	pthread_create(&thread, NULL, thread_routine, (void*) &th_data);
-	pthread_join(thread, NULL);
-	/* init(instance, rom); */
-	/* loop(instance); */
+image_t* cpu_get_image_inst(cpu_instance_t* instance) {
+	return instance->image;
 }

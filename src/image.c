@@ -13,7 +13,7 @@ struct image {
 image_t* image_create(int r, int c) {
 	image_t* i;
 
-	i = malloc(sizeof(image_t));
+	i = malloc(sizeof(struct image));
 	i->rows = r;
 	i->cols = c;
 	i->data = malloc(sizeof(uint8_t) * r * c);
@@ -91,4 +91,16 @@ void image_set_all(image_t *inst, uint8_t value) {
 void image_destroy(image_t* inst) {
 	free(inst->data);
 	free(inst);
+}
+
+void image_copy_to_rgb24(image_t* inst, uint8_t* dst, int red_scale, int green_scale, int blue_scale) {
+	int row, col;
+
+	for (row = 0; row < inst->rows; row++) {
+		for (col = 0; col < inst->cols; col++) {
+			dst[(row*col+col) * 3] = *image_at(inst, col, row) * red_scale;
+			dst[(row*col+col) * 3 + 1] = *image_at(inst, col, row) * green_scale;
+			dst[(row*col+col) * 3 + 2] = *image_at(inst, col, row) * blue_scale;
+		}
+	}
 }

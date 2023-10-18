@@ -16,11 +16,7 @@ void image_set_all(image_t* inst, uint8_t value);
 
 bool image_xor_sprite(image_t* inst, int c, int r, int height, uint8_t* sprite);
 
-void image_cols(image_t* inst);
-
-void image_rows(image_t* rows);
-
-void image_copy_to_rgb24(uint8_t* dst, int red_scale, int green_scale, int blue_scale);
+void image_copy_to_rgb24(image_t* inst, uint8_t* dst, int red_scale, int green_scale, int blue_scale);
 
 void image_draw_to_stdout(image_t* inst);
 
