@@ -9,12 +9,16 @@ struct sdl_timer {
 	uint32_t start_ticks;
 };
 
-static void sdl_timer_start(struct sdl_timer timer) {
-	timer.start_ticks = SDL_GetTicks();
+static void sdl_timer_start(struct sdl_timer* timer) {
+	timer->start_ticks = SDL_GetTicks();
 }
 
-static uint32_t sdl_timer_ms(struct sdl_timer timer) {
-	return SDL_GetTicks() - timer.start_ticks;
+static uint32_t sdl_timer_ms(struct sdl_timer* timer) {
+	return SDL_GetTicks() - timer->start_ticks;
+}
+
+static void sdl_timer_init(struct sdl_timer* timer) {
+	timer->start_ticks = 0;
 }
 
 struct sdl_view {
@@ -64,7 +68,8 @@ sdl_view_t* sdl_wrapper_create_view(char* title, int width, int height, int wind
 		exit(1);
 	}
 
-	sdl_timer_start(view->timer);
+	sdl_timer_init(&view->timer);
+	sdl_timer_start(&view->timer);
 	view->updates_count = 0;
 
 	view->events = malloc(sizeof(SDL_Event) * EVENTS_COUNT);
@@ -99,14 +104,14 @@ SDL_Event* sdl_wrapper_update(sdl_view_t* view, int* events_count) {
 	SDL_RenderPresent(view->renderer);
 
 	view->updates_count++;
-	avg_fps = view->updates_count / (sdl_timer_ms(view->timer) / 1000.f);
+	avg_fps = view->updates_count / (sdl_timer_ms(&view->timer) / 1000.f);
 
 	char title[255];
 	sprintf(title, "%s - %d fps", view->title, (int) avg_fps);
 	SDL_SetWindowTitle(view->window, title);
-	if (sdl_timer_ms(view->timer) > 1000) {
+	if (sdl_timer_ms(&view->timer) >= 1000) {
 		view->updates_count = 0;
-		sdl_timer_start(view->timer);
+		sdl_timer_start(&view->timer);
 	}
 
 	*events_count = i - 1;

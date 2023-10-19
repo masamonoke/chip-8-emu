@@ -8,6 +8,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <assert.h>
 
 #include <log.h>
 
@@ -637,49 +638,44 @@ static void run_cycle(cpu_instance_t* inst) {
 	}
 }
 
+static struct timespec diff_timespec(struct timespec t1, struct timespec t2) {
+	struct timespec diff;
+
+	diff.tv_sec = t1.tv_sec - t2.tv_sec;
+	diff.tv_nsec = t1.tv_nsec - t2.tv_nsec;
+	if (diff.tv_nsec < 0) {
+		diff.tv_nsec += 1000000000; // nsec/sec
+    	diff.tv_sec--;
+	}
+	return diff;
+}
+
 static void loop(cpu_instance_t* inst) {
 	struct timespec start_time;
 	struct timespec frame_start_time;
-	struct timespec millis_15;
 	struct timespec now;
-	struct timespec diff;
 	int vsync;
 	int cycle;
+	struct timespec delta;
 
 	while (atomic_load(&inst->is_running_)) {
-		timespec_get(&start_time, TIME_UTC);
+		clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
 		for (vsync = 0; vsync < refresh_rate_hz; vsync++) {
-			timespec_get(&frame_start_time, TIME_UTC);
+			clock_gettime(CLOCK_MONOTONIC_RAW, &frame_start_time);
 			for (cycle = 0; cycle < cycles_per_frame; cycle++) {
 				run_cycle(inst);
 			}
 			inst->frame_callback(32, inst->rgb24, inst->view, inst->image, inst->frame_mutex);
-			timespec_get(&now, TIME_UTC);
-			millis_15.tv_sec = 15 / 1000;
-			millis_15.tv_nsec = (15 % 1000) * 1000000;
-			struct timespec to_vsync = {
-				.tv_sec = millis_15.tv_sec - (now.tv_sec - frame_start_time.tv_sec),
-				.tv_nsec = millis_15.tv_nsec - (now.tv_nsec - frame_start_time.tv_nsec)
-			};
-			if (to_vsync.tv_nsec < 0) {
-				to_vsync.tv_nsec += 1000000000;
-				to_vsync.tv_sec--;
-			}
-			if (to_vsync.tv_nsec > 0 || to_vsync.tv_sec > 0) {
-				nanosleep(&to_vsync, NULL);
-			}
+			clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+			delta = diff_timespec(now, frame_start_time);
+			nanosleep(&delta, NULL);
 		}
 
-		timespec_get(&now, TIME_UTC);
-		diff.tv_sec = now.tv_sec - start_time.tv_sec;
-		diff.tv_nsec = now.tv_nsec - start_time.tv_nsec;
-		if (diff.tv_nsec < 0) {
-			diff.tv_nsec += 1000000000;
-			diff.tv_sec--;
-		}
-		if (diff.tv_sec > 0 || diff.tv_nsec > 0) {
-			log_info("CPU sleeping for %lld.%.9ld", (long long) diff.tv_sec, diff.tv_nsec);
-			nanosleep(&diff, NULL);
+		clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+		delta = diff_timespec(now, start_time);
+		if (delta.tv_sec > 0 || delta.tv_nsec > 0) {
+			log_info("CPU sleeping for %lld.%.9ld", (long long) delta.tv_sec, delta.tv_nsec);
+			nanosleep(&delta, NULL);
 		}
 	}
 }
