@@ -657,6 +657,7 @@ static void loop(cpu_instance_t* inst) {
 	int vsync;
 	int cycle;
 	struct timespec delta;
+	struct timespec delay;
 
 	while (atomic_load(&inst->is_running_)) {
 		clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
@@ -668,11 +669,20 @@ static void loop(cpu_instance_t* inst) {
 			inst->frame_callback(32, inst->rgb24, inst->view, inst->image, inst->frame_mutex);
 			clock_gettime(CLOCK_MONOTONIC_RAW, &now);
 			delta = diff_timespec(now, frame_start_time);
+			/* delay = { */
+			/* 	.tv_sec = 0, */
+			/* 	.tv_nsec = 15000000 */
+			/* }; */
+			delay.tv_sec = 0;
+			delay.tv_nsec = 15000000;
+			delta = diff_timespec(delay, delta);
 			nanosleep(&delta, NULL);
 		}
 
 		clock_gettime(CLOCK_MONOTONIC_RAW, &now);
 		delta = diff_timespec(now, start_time);
+		delay.tv_sec = 1;
+		delta = diff_timespec(delay, delta);
 		if (delta.tv_sec > 0 || delta.tv_nsec > 0) {
 			log_info("CPU sleeping for %lld.%.9ld", (long long) delta.tv_sec, delta.tv_nsec);
 			nanosleep(&delta, NULL);

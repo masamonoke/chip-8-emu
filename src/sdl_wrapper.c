@@ -5,29 +5,11 @@
 #include <SDL2/SDL.h>
 #include <log.h>
 
-struct sdl_timer {
-	uint32_t start_ticks;
-};
-
-static void sdl_timer_start(struct sdl_timer* timer) {
-	timer->start_ticks = SDL_GetTicks();
-}
-
-static uint32_t sdl_timer_ms(struct sdl_timer* timer) {
-	return SDL_GetTicks() - timer->start_ticks;
-}
-
-static void sdl_timer_init(struct sdl_timer* timer) {
-	timer->start_ticks = 0;
-}
-
 struct sdl_view {
 	SDL_Window* window;
 	SDL_Renderer* renderer;
 	SDL_Texture* window_texture;
 	SDL_Event* events;
-	struct sdl_timer timer;
-	int updates_count;
 	char* title;
 	pthread_mutex_t mu;
 };
@@ -68,10 +50,6 @@ sdl_view_t* sdl_wrapper_create_view(char* title, int width, int height, int wind
 		exit(1);
 	}
 
-	sdl_timer_init(&view->timer);
-	sdl_timer_start(&view->timer);
-	view->updates_count = 0;
-
 	view->events = malloc(sizeof(SDL_Event) * EVENTS_COUNT);
 	pthread_mutex_init(&view->mu, NULL);
 
@@ -89,7 +67,6 @@ SDL_Event* sdl_wrapper_update(sdl_view_t* view, int* events_count) {
 	pthread_mutex_lock(&view->mu);
 	size_t i;
 	SDL_Event e;
-	float avg_fps;
 
 	if (!view->window_texture) {
 		log_error("Need to set the frame before calling update.");
@@ -103,16 +80,9 @@ SDL_Event* sdl_wrapper_update(sdl_view_t* view, int* events_count) {
 	SDL_RenderCopy(view->renderer, view->window_texture, NULL, NULL);
 	SDL_RenderPresent(view->renderer);
 
-	view->updates_count++;
-	avg_fps = view->updates_count / (sdl_timer_ms(&view->timer) / 1000.f);
-
 	char title[255];
-	sprintf(title, "%s - %d fps", view->title, (int) avg_fps);
+	sprintf(title, "%s", view->title);
 	SDL_SetWindowTitle(view->window, title);
-	if (sdl_timer_ms(&view->timer) >= 1000) {
-		view->updates_count = 0;
-		sdl_timer_start(&view->timer);
-	}
 
 	*events_count = i - 1;
 	pthread_mutex_unlock(&view->mu);
