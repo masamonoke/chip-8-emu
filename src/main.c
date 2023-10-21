@@ -16,7 +16,6 @@ void frame_callback(int height, uint8_t* rgb24, sdl_view_t* view, image_t* image
 }
 
 void run(cpu_instance_t* inst, char* rom) {
-	enum CpuResult result;
 	bool quit;
 	sdl_view_t* view = NULL;
 	uint8_t* rgb24 = NULL;
@@ -24,22 +23,27 @@ void run(cpu_instance_t* inst, char* rom) {
 	int width, height;
 	int events_count;
 	int i;
+	int window_scale = 8;
 	pthread_mutex_t mu;
+	enum CpuResult cpu_res;
 
 	width = 64;
 	height = 32;
 	rgb24 = calloc(width * height * 3, sizeof(uint8_t));
-	view = sdl_wrapper_create_view("CHIP-8", width, height, 8);
+	view = sdl_wrapper_create_view("CHIP-8", width, height, window_scale);
 	if (pthread_mutex_init(&mu, NULL) != 0) {
 		log_error("Mutex init failed");
 		exit(1);
 	}
-	result = cpu_init(inst, rom, frame_callback, rgb24, view, &mu);
-	if (result != OK) {
+	cpu_res = cpu_init(inst, rom, frame_callback, rgb24, view, &mu);
+	if (cpu_res != OK) {
 		log_error("Error initializing CPU instance");
 		exit(1);
 	}
-	cpu_start(inst);
+	cpu_res = cpu_start(inst);
+	if (cpu_res != OK) {
+		exit(1);
+	}
 	quit = false;
 	while (!quit) {
 		new_events = sdl_wrapper_update(view, &events_count);
@@ -67,11 +71,15 @@ int main(int argc, char** argv) {
 	cpu_instance = NULL;
 	res = cpu_create_instance(&cpu_instance);
 	if (res == MEMORY_ERROR) {
-		log_error("Memory error");
+		log_error("CPU memory error");
+		exit(1);
+	}
+	if (cpu_instance == NULL) {
+		log_error("CPU instance is not initialized");
 		exit(1);
 	}
 
 	run(cpu_instance, argv[1]);
 
-	return 0;
+	return EXIT_SUCCESS;
 }

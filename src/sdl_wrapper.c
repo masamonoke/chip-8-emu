@@ -12,6 +12,8 @@ struct sdl_view {
 	SDL_Event* events;
 	char* title;
 	pthread_mutex_t mu;
+	int width;
+	int height;
 };
 
 #define EVENTS_COUNT 10000
@@ -52,6 +54,8 @@ sdl_view_t* sdl_wrapper_create_view(char* title, int width, int height, int wind
 
 	view->events = malloc(sizeof(SDL_Event) * EVENTS_COUNT);
 	pthread_mutex_init(&view->mu, NULL);
+	view->width = width;
+	view->height = height;
 
 	return view;
 }
@@ -98,4 +102,8 @@ void sdl_wrapper_set_frame_rgb24(sdl_view_t* view, uint8_t* rgb24, int height) {
 	memcpy(pixel_data, rgb24, pitch * height);
 	SDL_UnlockTexture(view->window_texture);
 	pthread_mutex_unlock(&view->mu);
+}
+
+int sdl_wrapper_get_view_height(sdl_view_t* view) {
+	return view->height;
 }

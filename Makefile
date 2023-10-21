@@ -11,7 +11,7 @@ OBJ := $(shell find $(DEPS_DIR) -name '*.c' -type f -execdir echo '{}' ';' | sed
 	   $(shell find $(SRC_DIR) -name '*.c' -type f -execdir echo '{}' ';' | sed "s/^/build\//g" | sed "s/\.c/\.o/g")
 
 INCLUDES := -Iinclude -Idependency/log/src
-COMPILE_TYPE = dev
+BUILD_TYPE = dev
 SDL2CFLAGS=-I/opt/homebrew/Cellar/sdl2/2.28.3/include -D_THREAD_SAFE
 LDFLAGS=-L/opt/homebrew/Cellar/sdl2/2.28.3/lib -lSDL2
 CFLAGS_DEV := -pedantic -Wall \
@@ -43,7 +43,7 @@ $(TARGET_NAME): deps
 
 deps: $(DEPS) $(SRC)
 	if ! test -d build; then mkdir build; fi
-ifeq ($(COMPILE_TYPE), release)
+ifeq ($(BUILD_TYPE), release)
 	$(CC) $(CFLAGS_RELEASE) -c $(DEPS) $(SRC) $(INCLUDES) && mv $(OBJ_RAW) build/
 else
 	$(CC) $(CFLAGS_DEV) -c $(DEPS) $(SRC) $(INCLUDES) && mv $(OBJ_RAW) build/

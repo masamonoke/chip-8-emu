@@ -90,7 +90,7 @@ static enum CpuResult load_rom(cpu_instance_t* inst, char* rom) {
 		return res;
 	}
 	memcpy(inst->memory + 0x200, buf, len);
-	dbg("Loaded %d bytes size rom", len);
+	log_info("Loaded %d bytes size rom", len);
 	return res;
 }
 
@@ -107,11 +107,9 @@ enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(
 	inst->sound_timer = 0;
 	inst->stack_pointer = 0;
 	inst->num_cycles = 0;
-	if (atomic_load(&inst->is_running)) {
-		log_error("Cannot start cpu twice");
-		exit(1);
-	}
-	atomic_init(&inst->is_running, true);
+
+	atomic_init(&inst->is_running, false);
+
 	// for 0:
 	// 0xF0 is 1111 0000 -> XXXX
 	// 0x90 is 1001 0000 -> X  X
@@ -135,6 +133,7 @@ enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(
 		0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 	};
 	memcpy(inst->memory + 0x50, fontset, sizeof(fontset));
+
 	inst->image = image_create(32, 64);
 	image_set_all(inst->image, 0);
 	inst->frame_callback = frame_callback;
@@ -150,7 +149,7 @@ enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(
 /* The interpreter sets the program counter to nnn. */
 static void jp(cpu_instance_t* inst, uint16_t addr) {
 	inst->program_counter = addr;
-	log_info("JP %d", addr);
+	dbg("JP %d", addr);
 }
 
 /* 2nnn - CALL addr */
@@ -456,7 +455,7 @@ static void cls(cpu_instance_t* inst) {
 
 static void ret(cpu_instance_t* inst) {
 	inst->program_counter = inst->stack[inst->stack_pointer--] + 2;
-	log_info("RET -- POPPED pc=0x%X off the stack.", inst->program_counter);
+	dbg("RET -- POPPED pc=0x%X off the stack.", inst->program_counter);
 }
 
 static enum CpuResult execute_instruction(cpu_instance_t* inst) {
@@ -475,139 +474,139 @@ static enum CpuResult execute_instruction(cpu_instance_t* inst) {
 	n = opcode & 0x000F;
 
 	if ( (opcode & 0xF000) == 0x1000 ) {
-		log_info("JP");
+		dbg("JP");
 		jp(inst, nnn);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0x2000 ) {
-		log_info("CALL");
+		dbg("CALL");
 		call(inst, nnn);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0x3000 ) {
-		log_info("SE");
+		dbg("SE");
 		se(inst, x, kk);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0x4000 ) {
-		log_info("SNE");
+		dbg("SNE");
 		sne(inst, x, kk);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x5000 ) {
-		log_info("SEREG");
+		dbg("SEREG");
 		sereg(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0x6000 ) {
-		log_info("LDIM");
+		dbg("LDIM");
 		ldim(inst, x, kk);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0x7000 ) {
-		log_info("ADDIM");
+		dbg("ADDIM");
 		addim(inst, x, kk);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x8000 ) {
-		log_info("LDV");
+		dbg("LDV");
 		ldv(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x8001 ) {
-		log_info("OR");
+		dbg("OR");
 		or(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x8002 ) {
-		log_info("AND");
+		dbg("AND");
 		and(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x8003 ) {
-		log_info("XOR");
+		dbg("XOR");
 		xor(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x8004 ) {
-		log_info("ADD");
+		dbg("ADD");
 		add(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x8005 ) {
-		log_info("SUB");
+		dbg("SUB");
 		sub(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x8006 ) {
-		log_info("SHR");
+		dbg("SHR");
 		shr(inst, x);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x8007 ) {
-		log_info("SUBN");
+		dbg("SUBN");
 		subn(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x800E ) {
-		log_info("SHL");
+		dbg("SHL");
 		shl(inst, x);
 		return OK;
 	} else if ( (opcode & 0xF00F) == 0x9000 ) {
-		log_info("SNEREG");
+		dbg("SNEREG");
 		snereg(inst, x, y);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0xA000 ) {
-		log_info("LDI");
+		dbg("LDI");
 		ldi(inst, nnn);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0xB000 ) {
-		log_info("JPREG");
+		dbg("JPREG");
 		jpreg(inst, nnn);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0xC000 ) {
-		log_info("RND");
+		dbg("RND");
 		rnd(inst, x, kk);
 		return OK;
 	} else if ( (opcode & 0xF000) == 0xD000 ) {
-		log_info("DRAW");
+		dbg("DRAW");
 		draw(inst, x, y, n);
 		return OK;
 	} else if ( (opcode & 0xF0FF) == 0xE09E ) {
-		log_info("SKEY");
+		dbg("SKEY");
 		skey(inst, x);
 		return OK;
 	} else if ( (opcode & 0xF0FF) == 0xE0A1 ) {
-		log_info("SNKEY");
+		dbg("SNKEY");
 		snkey(inst, x);
 		return OK;
 	} else if ( (opcode & 0xF0FF) == 0xF007 ) {
-		log_info("RDELAY");
+		dbg("RDELAY");
       	rdelay(inst, x);
 		return OK;
     } else if ( (opcode & 0xF0FF) == 0xF00A ) {
-		log_info("WAIT");
+		dbg("WAIT");
       	waitkey(inst, x);
 		return OK;
     } else if ( (opcode & 0xF0FF) == 0xF015 ) {
-		log_info("DELAY");
+		dbg("DELAY");
       	wdelay(inst, x);
 		return OK;
     } else if ( (opcode & 0xF0FF) == 0xF018 ) {
-		log_info("SOUND");
+		dbg("SOUND");
       	wsound(inst, x);
 		return OK;
     } else if ( (opcode & 0xF0FF) == 0xF01E ) {
-		log_info("ADDI");
+		dbg("ADDI");
       	addi(inst, x);
 		return OK;
     } else if ( (opcode & 0xF0FF) == 0xF029 ) {
-		log_info("LDSPRITE");
+		dbg("LDSPRITE");
       	ldsprite(inst, x);
 		return OK;
     } else if ( (opcode & 0xF0FF) == 0xF033 ) {
-		log_info("STBCD");
+		dbg("STBCD");
       	stbcd(inst, x);
 		return OK;
     } else if ((opcode & 0xF0FF) == 0xF055 ) {
-		log_info("STREG");
+		dbg("STREG");
       	streg(inst, x);
 		return OK;
     } else if ( (opcode & 0xF0FF) == 0xF065 ) {
-		log_info("LDREG");
+		dbg("LDREG");
       	ldreg(inst, x);
 		return OK;
     } else if (opcode == 0x00E0) {
-		log_info("CLS");
+		dbg("CLS");
 		cls(inst);
 		return OK;
 	} else if (opcode == 0x00EE) {
-		log_info("RET");
+		dbg("RET");
 		ret(inst);
 		return OK;
 	} else if (opcode == 0x0) {
@@ -654,10 +653,11 @@ static void loop(cpu_instance_t* inst) {
 	struct timespec start_time;
 	struct timespec frame_start_time;
 	struct timespec now;
-	int vsync;
-	int cycle;
 	struct timespec delta;
 	struct timespec delay;
+	int vsync;
+	int cycle;
+	int height;
 
 	while (atomic_load(&inst->is_running)) {
 		clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
@@ -666,7 +666,8 @@ static void loop(cpu_instance_t* inst) {
 			for (cycle = 0; cycle < cycles_per_frame; cycle++) {
 				run_cycle(inst);
 			}
-			inst->frame_callback(32, inst->rgb24, inst->view, inst->image, inst->frame_mutex);
+			height = sdl_wrapper_get_view_height(inst->view);
+			inst->frame_callback(height, inst->rgb24, inst->view, inst->image, inst->frame_mutex);
 			clock_gettime(CLOCK_MONOTONIC_RAW, &now);
 			delta = diff_timespec(now, frame_start_time);
 			delay.tv_sec = 0;
@@ -680,7 +681,7 @@ static void loop(cpu_instance_t* inst) {
 		delay.tv_sec = 1;
 		delta = diff_timespec(delay, delta);
 		if (delta.tv_sec > 0 || delta.tv_nsec > 0) {
-			log_info("CPU sleeping for %lld.%.9ld", (long long) delta.tv_sec, delta.tv_nsec);
+			dbg("CPU sleeping for %lld.%.9ld", (long long) delta.tv_sec, delta.tv_nsec);
 			nanosleep(&delta, NULL);
 		}
 	}
@@ -691,24 +692,43 @@ static void* thread_routine(void* data) {
 	cpu_instance_t* inst;
 
 	inst = (cpu_instance_t*) data;
-	log_info("is null: %d", inst == NULL);
 	log_info("Starting emulation loop");
 	atomic_store(&inst->is_running, true);
 	loop(inst);
 	pthread_exit(NULL);
 }
 
-void cpu_start(cpu_instance_t* instance) {
-	pthread_create(&instance->thread, NULL, thread_routine, (void*) instance);
+enum CpuResult cpu_start(cpu_instance_t* instance) {
+	int res;
+
+	if (atomic_load(&instance->is_running)) {
+		log_error("CPU is already running");
+		return INVALID_STATE;
+	}
+	atomic_store(&instance->is_running, true);
+	log_info("Starting CPU...");
+	res = pthread_create(&instance->thread, NULL, thread_routine, (void*) instance);
+	if (res != 0) {
+		log_error("CPU thread start error");
+		return THREAD_ERROR;
+	}
+	return OK;
 }
 
-void cpu_stop(cpu_instance_t* instance) {
+enum CpuResult cpu_stop(cpu_instance_t* instance) {
+	int res;
+
 	if (!atomic_load(&instance->is_running)) {
 		log_error("CPU must start() before stopping");
-		exit(1);
+		return INVALID_STATE;
 	}
 	atomic_store(&instance->is_running, false);
-	pthread_join(instance->thread, NULL);
+	res = pthread_join(instance->thread, NULL);
+	if (res != 0) {
+		log_error("CPU thred join error");
+		return THREAD_ERROR;
+	}
+	return OK;
 }
 
 image_t* cpu_get_image_inst(cpu_instance_t* instance) {

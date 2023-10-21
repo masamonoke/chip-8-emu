@@ -13,4 +13,6 @@ SDL_Event* sdl_wrapper_update(sdl_view_t* view, int* events_count);
 
 void sdl_wrapper_set_frame_rgb24(sdl_view_t* view, uint8_t* rgb24, int height);
 
+int sdl_wrapper_get_view_height(sdl_view_t* view);
+
 #endif // SDL_WRAPPER_H
