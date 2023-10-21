@@ -27,18 +27,18 @@ static const int cycles_per_frame = cycle_speed_hz / refresh_rate_hz;
 #endif
 
 struct cpu_instance {
-	uint16_t current_opcode_;
-	uint8_t memory_[4096];
-	uint8_t v_registers_[16];
-	uint16_t index_register_;
-	uint16_t program_counter_;
-	uint8_t delay_timer_;
-	uint8_t sound_timer_;
-	uint16_t stack_[16];
-	uint16_t stack_pointer_;
-	uint8_t keypad_state_[16];
-	uint64_t num_cycles_;
-	_Atomic(bool) is_running_;
+	uint16_t current_opcode;
+	uint8_t memory[4096];
+	uint8_t v_registers[16];
+	uint16_t index_register;
+	uint16_t program_counter;
+	uint8_t delay_timer;
+	uint8_t sound_timer;
+	uint16_t stack[16];
+	uint16_t stack_pointer;
+	uint8_t keypad_state[16];
+	uint64_t num_cycles;
+	_Atomic(bool) is_running;
 	image_t* image;
 	pthread_t thread;
 	void (*frame_callback)(int, uint8_t*, sdl_view_t*, image_t*, pthread_mutex_t*);
@@ -89,29 +89,29 @@ static enum CpuResult load_rom(cpu_instance_t* inst, char* rom) {
 		free(inst);
 		return res;
 	}
-	memcpy(inst->memory_ + 0x200, buf, len);
+	memcpy(inst->memory + 0x200, buf, len);
 	dbg("Loaded %d bytes size rom", len);
 	return res;
 }
 
 enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(int, uint8_t*, sdl_view_t*, image_t*, pthread_mutex_t*), uint8_t* rgb24,
 		sdl_view_t* view, pthread_mutex_t* mu) {
-	memset(inst->memory_, 0, sizeof(inst->memory_));
-	memset(inst->v_registers_, 0, sizeof(inst->v_registers_));
-	memset(inst->keypad_state_, 0, sizeof(inst->keypad_state_));
-	memset(inst->stack_, 0, sizeof(inst->keypad_state_));
-	inst->current_opcode_ = 0;
-	inst->index_register_ = 0;
-	inst->program_counter_ = 0x200;
-	inst->delay_timer_ = 0;
-	inst->sound_timer_ = 0;
-	inst->stack_pointer_ = 0;
-	inst->num_cycles_ = 0;
-	if (atomic_load(&inst->is_running_)) {
+	memset(inst->memory, 0, sizeof(inst->memory));
+	memset(inst->v_registers, 0, sizeof(inst->v_registers));
+	memset(inst->keypad_state, 0, sizeof(inst->keypad_state));
+	memset(inst->stack, 0, sizeof(inst->keypad_state));
+	inst->current_opcode = 0;
+	inst->index_register = 0;
+	inst->program_counter = 0x200;
+	inst->delay_timer = 0;
+	inst->sound_timer = 0;
+	inst->stack_pointer = 0;
+	inst->num_cycles = 0;
+	if (atomic_load(&inst->is_running)) {
 		log_error("Cannot start cpu twice");
 		exit(1);
 	}
-	atomic_init(&inst->is_running_, true);
+	atomic_init(&inst->is_running, true);
 	// for 0:
 	// 0xF0 is 1111 0000 -> XXXX
 	// 0x90 is 1001 0000 -> X  X
@@ -134,7 +134,7 @@ enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(
 		0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
 		0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 	};
-	memcpy(inst->memory_ + 0x50, fontset, sizeof(fontset));
+	memcpy(inst->memory + 0x50, fontset, sizeof(fontset));
 	inst->image = image_create(32, 64);
 	image_set_all(inst->image, 0);
 	inst->frame_callback = frame_callback;
@@ -149,7 +149,7 @@ enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(
 /* Jump to location nnn. */
 /* The interpreter sets the program counter to nnn. */
 static void jp(cpu_instance_t* inst, uint16_t addr) {
-	inst->program_counter_ = addr;
+	inst->program_counter = addr;
 	log_info("JP %d", addr);
 }
 
@@ -157,19 +157,19 @@ static void jp(cpu_instance_t* inst, uint16_t addr) {
 /* Call subroutine at nnn. */
 /* The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn. */
 static void call(cpu_instance_t* inst, uint16_t addr) {
-	inst->stack_[inst->stack_pointer_++] = inst->program_counter_;
-	dbg("CALL 0x%X - PUSH 0x%X onto stack", addr, inst->stack_[inst->stack_pointer_ - 1]);
-	inst->program_counter_ = addr;
+	inst->stack[inst->stack_pointer++] = inst->program_counter;
+	dbg("CALL 0x%X - PUSH 0x%X onto stack", addr, inst->stack[inst->stack_pointer - 1]);
+	inst->program_counter = addr;
 }
 
 static void skip(cpu_instance_t* inst) {
-	inst->program_counter_ += 4;
-	dbg("SKIP from 0x%X to 0x%X", inst->program_counter_ - 4, inst->program_counter_);
+	inst->program_counter += 4;
+	dbg("SKIP from 0x%X to 0x%X", inst->program_counter - 4, inst->program_counter);
 }
 
 static void next(cpu_instance_t* inst) {
-	inst->program_counter_ += 2;
-	dbg("NEXT from 0x%X to 0x%X", inst->program_counter_ - 2, inst->program_counter_);
+	inst->program_counter += 2;
+	dbg("NEXT from 0x%X to 0x%X", inst->program_counter - 2, inst->program_counter);
 }
 
 /* 3xkk - SE Vx, byte */
@@ -177,24 +177,24 @@ static void next(cpu_instance_t* inst) {
 /* The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2. */
 static void se(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
 	dbg("SE V%d, kk");
-	inst->v_registers_[reg] == value ? skip(inst) : next(inst);
+	inst->v_registers[reg] == value ? skip(inst) : next(inst);
 }
 
 // Skip next instruction if Vx != kk.
 static void sne(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
-	inst->v_registers_[reg] != value ? skip(inst) : next(inst);
+	inst->v_registers[reg] != value ? skip(inst) : next(inst);
 }
 
 // Skip next instruction if Vx = Vy. (5xy0 - SE Vx, Vy)
 static void sereg(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
-	inst->v_registers_[reg_x] == inst->v_registers_[reg_y] ? skip(inst) : next(inst);
+	inst->v_registers[reg_x] == inst->v_registers[reg_y] ? skip(inst) : next(inst);
 }
 
 // 6xkk - LD Vx, byte
 // Set Vx = kk.
 static void ldim(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
 	dbg("V%x <== 0x%X", reg, reg, value);
-	inst->v_registers_[reg] = value;
+	inst->v_registers[reg] = value;
 	next(inst);
 }
 
@@ -202,34 +202,34 @@ static void ldim(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
 // Set Vx = Vx + kk.
 static void addim(cpu_instance_t* inst, uint8_t reg, uint8_t value) {
 	dbg("V%d <== V%d + 0x%X", reg, reg, value);
-	inst->v_registers_[reg] += value;
+	inst->v_registers[reg] += value;
 	next(inst);
 }
 
 // 8xy0 - LD Vx, Vy
 // Set Vx = Vy.
 static void ldv(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
-	inst->v_registers_[reg_x] = inst->v_registers_[reg_y];
+	inst->v_registers[reg_x] = inst->v_registers[reg_y];
 	next(inst);
 }
 
 // 8xy1 - OR Vx, Vy
 // Set Vx = Vx OR Vy.
 static void or(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
-	inst->v_registers_[reg_x] |= inst->v_registers_[reg_y];
+	inst->v_registers[reg_x] |= inst->v_registers[reg_y];
 	next(inst);
 }
 // 8xy2 - AND Vx, Vy
 // Set Vx = Vx AND Vy.
 static void and(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
-	inst->v_registers_[reg_x] &= inst->v_registers_[reg_y];
+	inst->v_registers[reg_x] &= inst->v_registers[reg_y];
 	next(inst);
 }
 
 // 8xy3 - XOR Vx, Vy
 // Set Vx = Vx XOR Vy.
 static void xor(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
-	inst->v_registers_[reg_x] ^= inst->v_registers_[reg_y];
+	inst->v_registers[reg_x] ^= inst->v_registers[reg_y];
 	next(inst);
 }
 
@@ -239,9 +239,9 @@ static void xor(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 // VF is set to 1, otherwise 0. Only the lowest 8 bits of the result are kept, and stored in Vx.
 static void add(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 	uint16_t res;
-	res = inst->v_registers_[reg_x] += inst->v_registers_[reg_y];
-	inst->v_registers_[0xF] = res > 0xFF;
-	inst->v_registers_[reg_x] = res;
+	res = inst->v_registers[reg_x] += inst->v_registers[reg_y];
+	inst->v_registers[0xF] = res > 0xFF;
+	inst->v_registers[reg_x] = res;
 	next(inst);
 }
 
@@ -249,8 +249,8 @@ static void add(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 /* Set Vx = Vx - Vy, set VF = NOT borrow. */
 /* If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx. */
 static void sub(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
-	inst->v_registers_[0xF] = inst->v_registers_[reg_x] > inst->v_registers_[reg_y];
-	inst->v_registers_[reg_x] -= inst->v_registers_[reg_y];
+	inst->v_registers[0xF] = inst->v_registers[reg_x] > inst->v_registers[reg_y];
+	inst->v_registers[reg_x] -= inst->v_registers[reg_y];
 	next(inst);
 }
 
@@ -259,8 +259,8 @@ static void sub(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 /* If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2. */
 /* SHR is shift right */
 static void shr(cpu_instance_t* inst, uint8_t reg_x) {
-	inst->v_registers_[0xF] = inst->v_registers_[reg_x] & 1;
-	inst->v_registers_[reg_x] >>= 1;
+	inst->v_registers[0xF] = inst->v_registers[reg_x] & 1;
+	inst->v_registers[reg_x] >>= 1;
 	next(inst);
 }
 
@@ -268,8 +268,8 @@ static void shr(cpu_instance_t* inst, uint8_t reg_x) {
 /* Set Vx = Vy - Vx, set VF = NOT borrow. */
 /* If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx. */
 static void subn(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
-	inst->v_registers_[0xF] = inst->v_registers_[reg_y] > inst->v_registers_[reg_x];
-	inst->v_registers_[reg_x] = inst->v_registers_[reg_y] - inst->v_registers_[reg_x];
+	inst->v_registers[0xF] = inst->v_registers[reg_y] > inst->v_registers[reg_x];
+	inst->v_registers[reg_x] = inst->v_registers[reg_y] - inst->v_registers[reg_x];
 	next(inst);
 }
 
@@ -277,8 +277,8 @@ static void subn(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 /* Set Vx = Vx SHL 1. */
 /* If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2. */
 static void shl(cpu_instance_t* inst, uint8_t reg) {
-	inst->v_registers_[0xF] = inst->v_registers_[reg] > 0x80;
-	inst->v_registers_[reg] <<= 1;
+	inst->v_registers[0xF] = inst->v_registers[reg] > 0x80;
+	inst->v_registers[reg] <<= 1;
 	next(inst);
 }
 
@@ -286,15 +286,15 @@ static void shl(cpu_instance_t* inst, uint8_t reg) {
 /* Skip next instruction if Vx != Vy. */
 /* The values of Vx and Vy are compared, and if they are not equal, the program counter is increased by 2. */
 static void snereg(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
-	inst->v_registers_[reg_x] != inst->v_registers_[reg_y] ? skip(inst) : next(inst);
+	inst->v_registers[reg_x] != inst->v_registers[reg_y] ? skip(inst) : next(inst);
 }
 
 /* Annn - LD I, addr */
 /* Set I = nnn. */
 /* The value of register I is set to nnn. */
 static void ldi(cpu_instance_t* inst, uint16_t addr) {
-	inst->index_register_ = addr;
-	dbg("I <== 0x%X", inst->index_register_, addr);
+	inst->index_register = addr;
+	dbg("I <== 0x%X", inst->index_register, addr);
 	next(inst);
 }
 
@@ -302,7 +302,7 @@ static void ldi(cpu_instance_t* inst, uint16_t addr) {
 /* Jump to location nnn + V0. */
 /* The program counter is set to nnn plus the value of V0. */
 static void jpreg(cpu_instance_t* inst, uint16_t addr) {
-	inst->program_counter_ = inst->v_registers_[0] + addr;
+	inst->program_counter = inst->v_registers[0] + addr;
 }
 
 /* Cxkk - RND Vx, byte */
@@ -310,7 +310,7 @@ static void jpreg(cpu_instance_t* inst, uint16_t addr) {
 /* The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk. */
 /* The results are stored in Vx. See instruction 8xy2 for more information on AND. */
 static void rnd(cpu_instance_t* inst, uint8_t reg_x, uint8_t value) {
-	inst->v_registers_[reg_x] = (rand() % 256) & value;
+	inst->v_registers[reg_x] = (rand() % 256) & value;
 	next(inst);
 }
 
@@ -326,10 +326,10 @@ static void draw(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y, uint8_t n_r
 	uint8_t y;
 	bool pixels_unset;
 
-	x = inst->v_registers_[reg_x];
-	y = inst->v_registers_[reg_y];
-	pixels_unset = image_xor_sprite(inst->image, x, y, n_rows, inst->memory_ + inst->index_register_);
-	inst->v_registers_[0xF] = pixels_unset;
+	x = inst->v_registers[reg_x];
+	y = inst->v_registers[reg_y];
+	pixels_unset = image_xor_sprite(inst->image, x, y, n_rows, inst->memory + inst->index_register);
+	inst->v_registers[0xF] = pixels_unset;
 	next(inst);
 }
 
@@ -337,21 +337,21 @@ static void draw(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y, uint8_t n_r
 /* Skip next instruction if key with the value of Vx is pressed. */
 /* Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2. */
 static void skey(cpu_instance_t* inst, uint8_t reg_x) {
-	inst->keypad_state_[inst->v_registers_[reg_x]] ? skip(inst) : next(inst);
+	inst->keypad_state[inst->v_registers[reg_x]] ? skip(inst) : next(inst);
 }
 
 /* ExA1 - SKNP Vx */
 /* Skip next instruction if key with the value of Vx is not pressed. */
 /* Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2. */
 static void snkey(cpu_instance_t* inst, uint8_t reg) {
-	inst->keypad_state_[inst->v_registers_[reg]] ? next(inst) : skip(inst);
+	inst->keypad_state[inst->v_registers[reg]] ? next(inst) : skip(inst);
 }
 
 /* Fx07 - LD Vx, DT */
 /* Set Vx = delay timer value. */
 /* The value of DT is placed into Vx. */
 static void rdelay(cpu_instance_t* inst, uint8_t reg) {
-	inst->v_registers_[reg] = inst->delay_timer_;
+	inst->v_registers[reg] = inst->delay_timer;
 	next(inst);
 }
 
@@ -368,7 +368,7 @@ static void waitkey(cpu_instance_t* inst, uint8_t reg) {
 /* Set delay timer = Vx. */
 /* DT is set equal to the value of Vx. */
 static void wdelay(cpu_instance_t* inst, uint8_t reg) {
-	inst->delay_timer_ = inst->v_registers_[reg];
+	inst->delay_timer = inst->v_registers[reg];
 	next(inst);
 }
 
@@ -376,7 +376,7 @@ static void wdelay(cpu_instance_t* inst, uint8_t reg) {
 /* Set sound timer = Vx. */
 /* ST is set equal to the value of Vx. */
 static void wsound(cpu_instance_t* inst, uint8_t reg) {
-	inst->sound_timer_ = inst->v_registers_[reg];
+	inst->sound_timer = inst->v_registers[reg];
 	next(inst);
 }
 
@@ -384,7 +384,7 @@ static void wsound(cpu_instance_t* inst, uint8_t reg) {
 /* Set I = I + Vx. */
 /* The values of I and Vx are added, and the results are stored in I. */
 static void addi(cpu_instance_t* inst, uint8_t reg) {
-	inst->index_register_ += inst->v_registers_[reg];
+	inst->index_register += inst->v_registers[reg];
 	next(inst);
 }
 
@@ -394,8 +394,8 @@ static void addi(cpu_instance_t* inst, uint8_t reg) {
 static void ldsprite(cpu_instance_t* inst, uint8_t reg) {
 	uint8_t digit;
 
-	digit = inst->v_registers_[reg];
-	inst->index_register_ = 0x50 + (5 * digit);
+	digit = inst->v_registers[reg];
+	inst->index_register = 0x50 + (5 * digit);
 	dbg("LD (sprite) digit %d. I <== 0x%X", digit, 0x50 + (5 * digit));
 	next(inst);
 }
@@ -411,14 +411,14 @@ static void stbcd(cpu_instance_t* inst, uint8_t reg) {
 	uint8_t ones;
 	uint16_t i;
 
-	value = inst->v_registers_[reg];
+	value = inst->v_registers[reg];
 	hundreds = value / 100;
 	tens = (value / 10) % 10;
 	ones = (value % 100) % 10;
-	i = inst->index_register_;
-	inst->memory_[i] = hundreds;
-	inst->memory_[i + 1] = tens;
-	inst->memory_[i + 2] = ones;
+	i = inst->index_register;
+	inst->memory[i] = hundreds;
+	inst->memory[i + 1] = tens;
+	inst->memory[i + 2] = ones;
 	dbg("LD (store BCD) value: %d, res: %d%d%d", value, hundreds, tens, ones);
 	next(inst);
 }
@@ -430,7 +430,7 @@ static void streg(cpu_instance_t* inst, uint8_t reg) {
 	uint8_t v;
 
 	for (v = 0; v <= reg; v++) {
-		inst->memory_[inst->index_register_ + v] = inst->v_registers_[v];
+		inst->memory[inst->index_register + v] = inst->v_registers[v];
 	}
 	next(inst);
 }
@@ -443,8 +443,8 @@ static void ldreg(cpu_instance_t* inst, uint8_t reg) {
 
 	dbg("LD (Fx65) ");
 	for (v = 0; v <= reg; v++) {
-		dbg("(V%d <== M[%X] {%d})", v, inst->index_register_ + v, inst->memory_[inst->index_register_ + v]);
-		inst->v_registers_[v] = inst->memory_[inst->index_register_ + v];
+		dbg("(V%d <== M[%X] {%d})", v, inst->index_register + v, inst->memory[inst->index_register + v]);
+		inst->v_registers[v] = inst->memory[inst->index_register + v];
 	}
 	next(inst);
 }
@@ -455,8 +455,8 @@ static void cls(cpu_instance_t* inst) {
 }
 
 static void ret(cpu_instance_t* inst) {
-	inst->program_counter_ = inst->stack_[inst->stack_pointer_--] + 2;
-	log_info("RET -- POPPED pc=0x%X off the stack.", inst->program_counter_);
+	inst->program_counter = inst->stack[inst->stack_pointer--] + 2;
+	log_info("RET -- POPPED pc=0x%X off the stack.", inst->program_counter);
 }
 
 static enum CpuResult execute_instruction(cpu_instance_t* inst) {
@@ -467,7 +467,7 @@ static enum CpuResult execute_instruction(cpu_instance_t* inst) {
 	uint8_t y;    // y - A 4-bit value, the upper 4 bits of the low byte of the instruction
 	uint8_t n;    // n or nibble - A 4-bit value, the lowest 4 bits of the instruction
 
-	opcode = inst->current_opcode_;
+	opcode = inst->current_opcode;
 	nnn = opcode & 0x0FFF;
 	kk = opcode & 0x00FF;
 	x = (opcode & 0x0F00) >> 8;
@@ -620,20 +620,20 @@ static enum CpuResult execute_instruction(cpu_instance_t* inst) {
 static void run_cycle(cpu_instance_t* inst) {
 	enum CpuResult res;
 
-	inst->current_opcode_ = inst->memory_[inst->program_counter_] << 8 | inst->memory_[inst->program_counter_ + 1];
-	//dbg("0x%X - 0x%X\t", inst->program_counter_, inst->current_opcode_);
+	inst->current_opcode = inst->memory[inst->program_counter] << 8 | inst->memory[inst->program_counter + 1];
+	//dbg("0x%X - 0x%X\t", inst->program_counter, inst->current_opcode);
 	res = execute_instruction(inst);
 	if (res != OK) {
-		log_error("Instruction not found for opcode 0x%X", inst->current_opcode_);
+		log_error("Instruction not found for opcode 0x%X", inst->current_opcode);
 	}
-	inst->num_cycles_++;
-	if (inst->num_cycles_ % cycles_per_frame == 0) {
-		if (inst->delay_timer_ > 0) {
-			inst->delay_timer_--;
+	inst->num_cycles++;
+	if (inst->num_cycles % cycles_per_frame == 0) {
+		if (inst->delay_timer > 0) {
+			inst->delay_timer--;
 		}
-		if (inst->sound_timer_ > 0) {
+		if (inst->sound_timer > 0) {
 			log_info("Beeping");
-			inst->sound_timer_--;
+			inst->sound_timer--;
 		}
 	}
 }
@@ -659,7 +659,7 @@ static void loop(cpu_instance_t* inst) {
 	struct timespec delta;
 	struct timespec delay;
 
-	while (atomic_load(&inst->is_running_)) {
+	while (atomic_load(&inst->is_running)) {
 		clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
 		for (vsync = 0; vsync < refresh_rate_hz; vsync++) {
 			clock_gettime(CLOCK_MONOTONIC_RAW, &frame_start_time);
@@ -669,10 +669,6 @@ static void loop(cpu_instance_t* inst) {
 			inst->frame_callback(32, inst->rgb24, inst->view, inst->image, inst->frame_mutex);
 			clock_gettime(CLOCK_MONOTONIC_RAW, &now);
 			delta = diff_timespec(now, frame_start_time);
-			/* delay = { */
-			/* 	.tv_sec = 0, */
-			/* 	.tv_nsec = 15000000 */
-			/* }; */
 			delay.tv_sec = 0;
 			delay.tv_nsec = 15000000;
 			delta = diff_timespec(delay, delta);
@@ -697,7 +693,7 @@ static void* thread_routine(void* data) {
 	inst = (cpu_instance_t*) data;
 	log_info("is null: %d", inst == NULL);
 	log_info("Starting emulation loop");
-	atomic_store(&inst->is_running_, true);
+	atomic_store(&inst->is_running, true);
 	loop(inst);
 	pthread_exit(NULL);
 }
@@ -707,11 +703,11 @@ void cpu_start(cpu_instance_t* instance) {
 }
 
 void cpu_stop(cpu_instance_t* instance) {
-	if (!atomic_load(&instance->is_running_)) {
+	if (!atomic_load(&instance->is_running)) {
 		log_error("CPU must start() before stopping");
 		exit(1);
 	}
-	atomic_store(&instance->is_running_, false);
+	atomic_store(&instance->is_running, false);
 	pthread_join(instance->thread, NULL);
 }
 
