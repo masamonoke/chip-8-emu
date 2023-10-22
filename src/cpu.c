@@ -42,9 +42,11 @@ struct cpu_instance {
 	image_t* image;
 	pthread_t thread;
 	void (*frame_callback)(int, uint8_t*, sdl_view_t*, image_t*, pthread_mutex_t*);
+	void (*key_callback)(sdl_view_t*, pthread_mutex_t*, uint8_t*);
 	uint8_t* rgb24;
 	sdl_view_t* view;
 	pthread_mutex_t* frame_mutex;
+	pthread_mutex_t* key_mutex;
 };
 
 enum CpuResult cpu_create_instance(cpu_instance_t** inst) {
@@ -94,12 +96,20 @@ static enum CpuResult load_rom(cpu_instance_t* inst, char* rom) {
 	return res;
 }
 
-enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(int, uint8_t*, sdl_view_t*, image_t*, pthread_mutex_t*), uint8_t* rgb24,
-		sdl_view_t* view, pthread_mutex_t* mu) {
+enum CpuResult cpu_init(
+		cpu_instance_t* inst,
+		char* rom,
+		void(* frame_callback)(int, uint8_t*, sdl_view_t*, image_t*, pthread_mutex_t*),
+		uint8_t* rgb24,
+		sdl_view_t* view, pthread_mutex_t* mu,
+		void(* key_callback)(sdl_view_t*, pthread_mutex_t*, uint8_t*)) {
+
+	int width, height;
+
 	memset(inst->memory, 0, sizeof(inst->memory));
 	memset(inst->v_registers, 0, sizeof(inst->v_registers));
 	memset(inst->keypad_state, 0, sizeof(inst->keypad_state));
-	memset(inst->stack, 0, sizeof(inst->keypad_state));
+	memset(inst->stack, 0, sizeof(inst->stack));
 	inst->current_opcode = 0;
 	inst->index_register = 0;
 	inst->program_counter = 0x200;
@@ -134,12 +144,15 @@ enum CpuResult cpu_init(cpu_instance_t* inst, char* rom, void(* frame_callback)(
 	};
 	memcpy(inst->memory + 0x50, fontset, sizeof(fontset));
 
-	inst->image = image_create(32, 64);
+	width = sdl_wrapper_get_view_width(view);
+	height = sdl_wrapper_get_view_height(view);
+	inst->image = image_create(height,width);
 	image_set_all(inst->image, 0);
 	inst->frame_callback = frame_callback;
 	inst->rgb24 = rgb24;
 	inst->view = view;
 	inst->frame_mutex = mu;
+	inst->key_callback = key_callback;
 
 	return load_rom(inst, rom);
 }
@@ -238,7 +251,7 @@ static void xor(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 // VF is set to 1, otherwise 0. Only the lowest 8 bits of the result are kept, and stored in Vx.
 static void add(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y) {
 	uint16_t res;
-	res = inst->v_registers[reg_x] += inst->v_registers[reg_y];
+	res = inst->v_registers[reg_x] + inst->v_registers[reg_y];
 	inst->v_registers[0xF] = res > 0xFF;
 	inst->v_registers[reg_x] = res;
 	next(inst);
@@ -337,6 +350,7 @@ static void draw(cpu_instance_t* inst, uint8_t reg_x, uint8_t reg_y, uint8_t n_r
 /* Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2. */
 static void skey(cpu_instance_t* inst, uint8_t reg_x) {
 	inst->keypad_state[inst->v_registers[reg_x]] ? skip(inst) : next(inst);
+	inst->keypad_state[inst->v_registers[reg_x]] = 0; // reset button
 }
 
 /* ExA1 - SKNP Vx */
@@ -344,6 +358,7 @@ static void skey(cpu_instance_t* inst, uint8_t reg_x) {
 /* Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2. */
 static void snkey(cpu_instance_t* inst, uint8_t reg) {
 	inst->keypad_state[inst->v_registers[reg]] ? next(inst) : skip(inst);
+	inst->keypad_state[inst->v_registers[reg]] = 0; // reset button
 }
 
 /* Fx07 - LD Vx, DT */
@@ -440,7 +455,6 @@ static void streg(cpu_instance_t* inst, uint8_t reg) {
 static void ldreg(cpu_instance_t* inst, uint8_t reg) {
 	uint8_t v;
 
-	dbg("LD (Fx65) ");
 	for (v = 0; v <= reg; v++) {
 		dbg("(V%d <== M[%X] {%d})", v, inst->index_register + v, inst->memory[inst->index_register + v]);
 		inst->v_registers[v] = inst->memory[inst->index_register + v];
@@ -449,12 +463,12 @@ static void ldreg(cpu_instance_t* inst, uint8_t reg) {
 }
 
 static void cls(cpu_instance_t* inst) {
-	NOT_IMPLEMENTED("cls");
+	image_set_all(inst->image, 0);
 	next(inst);
 }
 
 static void ret(cpu_instance_t* inst) {
-	inst->program_counter = inst->stack[inst->stack_pointer--] + 2;
+	inst->program_counter = inst->stack[--inst->stack_pointer] + 2;
 	dbg("RET -- POPPED pc=0x%X off the stack.", inst->program_counter);
 }
 
@@ -620,7 +634,6 @@ static void run_cycle(cpu_instance_t* inst) {
 	enum CpuResult res;
 
 	inst->current_opcode = inst->memory[inst->program_counter] << 8 | inst->memory[inst->program_counter + 1];
-	//dbg("0x%X - 0x%X\t", inst->program_counter, inst->current_opcode);
 	res = execute_instruction(inst);
 	if (res != OK) {
 		log_error("Instruction not found for opcode 0x%X", inst->current_opcode);
@@ -663,6 +676,7 @@ static void loop(cpu_instance_t* inst) {
 		clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
 		for (vsync = 0; vsync < refresh_rate_hz; vsync++) {
 			clock_gettime(CLOCK_MONOTONIC_RAW, &frame_start_time);
+			inst->key_callback(inst->view, inst->frame_mutex, inst->keypad_state);
 			for (cycle = 0; cycle < cycles_per_frame; cycle++) {
 				run_cycle(inst);
 			}
