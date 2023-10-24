@@ -12,8 +12,9 @@ OBJ := $(shell find $(DEPS_DIR) -name '*.c' -type f -execdir echo '{}' ';' | sed
 
 INCLUDES := -Iinclude -Idependency/log/src
 BUILD_TYPE = dev
-SDL2CFLAGS=-I/opt/homebrew/Cellar/sdl2/2.28.3/include -D_THREAD_SAFE
-LDFLAGS=-L/opt/homebrew/Cellar/sdl2/2.28.3/lib -lSDL2
+SDL_PATH ?= /opt/homebrew/Cellar/sdl2/2.28.3
+SDL2CFLAGS := -I$(SDL_PATH)/include -D_THREAD_SAFE
+LDFLAGS := -L$(SDL_PATH)/lib -lSDL2
 CFLAGS_DEV := -pedantic -Wall \
      -Wno-missing-braces -Wextra -Wno-missing-field-initializers \
      -Wformat=2 -Wswitch-default -Wswitch-enum -Wcast-align \
