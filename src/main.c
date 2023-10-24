@@ -8,11 +8,10 @@
 #include <sdl_wrapper.h>
 #include <utils.h>
 
-// WARNING: somehow it works but some game events not trigger
 
 void frame_callback(int height, uint8_t* rgb24, sdl_view_t* view, image_t* image, pthread_mutex_t* mu) {
 	pthread_mutex_lock(mu);
-	image_copy_to_rgb24(image, rgb24, 255, 20, 20);
+	image_copy_to_rgb24(image, rgb24, 200, 55, 233);
 	sdl_wrapper_set_frame_rgb24(view, rgb24, height);
 	pthread_mutex_unlock(mu);
 }
@@ -83,7 +82,6 @@ void key_callback(sdl_view_t* view, pthread_mutex_t* mu, uint8_t* keypad) {
 					log_info("Not keypad key pressed");
 					continue;
 			}
-			log_info("Key %d is pressed", key);
 			keypad[key] = 1;
 		}
 	}
@@ -136,9 +134,11 @@ void run(cpu_instance_t* inst, char* rom) {
 				continue;
 			}
 		}
-		pthread_mutex_lock(&event_mu);
-		sdl_wrapper_set_events(view, new_events, events_count);
-		pthread_mutex_unlock(&event_mu);
+		{
+			pthread_mutex_lock(&event_mu);
+			sdl_wrapper_set_events(view, new_events, events_count);
+			pthread_mutex_unlock(&event_mu);
+		}
 		usleep(10);
 	}
 	cpu_stop(inst);
